@@ -38,40 +38,49 @@ compile_error!("Rustls currently does not support alloc-less environments");
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+use core::fmt::Debug;
+use core::marker::PhantomData;
+
 #[cfg(feature = "alloc")]
 use alloc::sync::Arc;
 
-use rustls::crypto::{
-    CipherSuiteCommon, CryptoProvider, GetRandomFailed, KeyProvider, SecureRandom,
-};
+use alloc::vec::Vec;
+use rand_core::{CryptoRng, RngCore};
+use rustls::crypto::{CipherSuiteCommon, GetRandomFailed, KeyProvider, SecureRandom, WebPkiSupportedAlgorithms};
 use rustls::{CipherSuite, SupportedCipherSuite, Tls13CipherSuite};
 
 #[cfg(feature = "tls12")]
 use rustls::SignatureScheme;
+use verify::ALGORITHMS;
+
+pub trait GeneratedRng: CryptoRng + RngCore + Debug + Sync + Send {
+    fn new() -> Self;
+}
 
 #[derive(Debug)]
-pub struct Provider;
+pub struct Provider<R> {
+    random: PhantomData<R>,
+}
 
-pub fn provider() -> CryptoProvider {
-    CryptoProvider {
-        cipher_suites: ALL_CIPHER_SUITES.to_vec(),
-        kx_groups: kx::ALL_KX_GROUPS.to_vec(),
-        signature_verification_algorithms: verify::ALGORITHMS,
-        secure_random: &Provider,
-        key_provider: &Provider,
+impl<R> Provider<R> {
+    pub const fn new() -> Self {
+        Provider { random: PhantomData }
     }
 }
 
-impl SecureRandom for Provider {
+impl<R> SecureRandom for Provider<R>
+where
+    R: GeneratedRng,
+{
     fn fill(&self, bytes: &mut [u8]) -> Result<(), GetRandomFailed> {
-        use rand_core::RngCore;
-        rand_core::OsRng
-            .try_fill_bytes(bytes)
-            .map_err(|_| GetRandomFailed)
+        R::new().try_fill_bytes(bytes).map_err(|_| GetRandomFailed)
     }
 }
 
-impl KeyProvider for Provider {
+impl<R> KeyProvider for Provider<R>
+where
+    R: RngCore + Debug + Sync + Send,
+{
     fn load_private_key(
         &self,
         key_der: pki_types::PrivateKeyDer<'static>,
@@ -99,7 +108,7 @@ const TLS12_RSA_SCHEMES: [SignatureScheme; 6] = [
 ];
 
 #[cfg(feature = "tls12")]
-pub const TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+const TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
@@ -113,7 +122,7 @@ pub const TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     });
 
 #[cfg(feature = "tls12")]
-pub const TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+const TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
@@ -127,7 +136,7 @@ pub const TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     });
 
 #[cfg(feature = "tls12")]
-pub const TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+const TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -148,7 +157,7 @@ const TLS_ECDHE_ECDSA_SUITES: &[SupportedCipherSuite] = &[
 ];
 
 #[cfg(feature = "tls12")]
-pub const TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
+const TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
@@ -162,7 +171,7 @@ pub const TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256: SupportedCipherSuite =
     });
 
 #[cfg(feature = "tls12")]
-pub const TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
+const TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
@@ -176,7 +185,7 @@ pub const TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384: SupportedCipherSuite =
     });
 
 #[cfg(feature = "tls12")]
-pub const TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+const TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls12(&rustls::Tls12CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -206,7 +215,7 @@ const TLS12_SUITES: &[SupportedCipherSuite] = misc::const_concat_slices!(
 #[cfg(not(feature = "tls12"))]
 const TLS12_SUITES: &[SupportedCipherSuite] = &[];
 
-pub const TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
+const TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(&Tls13CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_128_GCM_SHA256,
@@ -218,7 +227,7 @@ pub const TLS13_AES_128_GCM_SHA256: SupportedCipherSuite =
         quic: None,
     });
 
-pub const TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
+const TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(&Tls13CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_AES_256_GCM_SHA384,
@@ -233,7 +242,7 @@ pub const TLS13_AES_256_GCM_SHA384: SupportedCipherSuite =
 const TLS13_AES_SUITES: &[SupportedCipherSuite] =
     &[TLS13_AES_128_GCM_SHA256, TLS13_AES_256_GCM_SHA384];
 
-pub const TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
+const TLS13_CHACHA20_POLY1305_SHA256: SupportedCipherSuite =
     SupportedCipherSuite::Tls13(&Tls13CipherSuite {
         common: CipherSuiteCommon {
             suite: CipherSuite::TLS13_CHACHA20_POLY1305_SHA256,
@@ -261,11 +270,21 @@ static ALL_CIPHER_SUITES: &[SupportedCipherSuite] = misc::const_concat_slices!(
     TLS13_SUITES,
 );
 
+/// Returns a vector of all supported cipher suites.
+pub fn all_cipher_suites() -> Vec<SupportedCipherSuite> {
+    ALL_CIPHER_SUITES.to_vec()
+}
+
+/// Returns a vector of all supported signature verification algorithms.
+pub fn all_signature_verification_algorithms() -> WebPkiSupportedAlgorithms {
+    ALGORITHMS
+}
+
 mod aead;
 mod hash;
 mod hmac;
-mod kx;
+pub mod kx;
 mod misc;
-pub mod quic;
-pub mod sign;
+// mod quic;
+mod sign;
 mod verify;

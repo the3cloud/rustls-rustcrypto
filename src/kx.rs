@@ -1,21 +1,41 @@
+use core::marker::PhantomData;
+
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
-use crypto::{SharedSecret, SupportedKxGroup};
+use crypto::SharedSecret;
 use paste::paste;
 use rustls::crypto;
 
-#[derive(Debug)]
-pub struct X25519;
+use crate::GeneratedRng;
 
-impl crypto::SupportedKxGroup for X25519 {
+#[derive(Debug)]
+pub struct X25519<R> {
+    marker: PhantomData<R>,
+}
+
+impl<R> X25519<R> {
+    pub const fn new() -> Self {
+        Self {
+            marker: PhantomData,
+        }
+    }
+}
+
+impl<R> crypto::SupportedKxGroup for X25519<R>
+where
+    R: GeneratedRng,
+{
     fn name(&self) -> rustls::NamedGroup {
         rustls::NamedGroup::X25519
     }
 
     fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
-        let priv_key = x25519_dalek::EphemeralSecret::random_from_rng(rand_core::OsRng);
+        let mut rng = R::new();
+
+        let priv_key = x25519_dalek::EphemeralSecret::random_from_rng(&mut rng);
         let pub_key = (&priv_key).into();
+
         Ok(Box::new(X25519KeyExchange { priv_key, pub_key }))
     }
 }
@@ -42,7 +62,7 @@ impl crypto::ActiveKeyExchange for X25519KeyExchange {
     }
 
     fn group(&self) -> rustls::NamedGroup {
-        X25519.name()
+        rustls::NamedGroup::X25519
     }
 }
 
@@ -52,15 +72,29 @@ macro_rules! impl_kx {
 
             #[derive(Debug)]
             #[allow(non_camel_case_types)]
-            pub struct $name;
+            pub struct $name<R> {
+                marker: PhantomData<R>,
+            }
 
-            impl crypto::SupportedKxGroup for $name {
+            impl<R> $name<R> {
+                pub const fn new() -> Self {
+                    Self {
+                        marker: PhantomData,
+                    }
+                }
+            }
+
+            impl<R> crypto::SupportedKxGroup for $name<R>
+            where
+                R: GeneratedRng,
+            {
                 fn name(&self) -> rustls::NamedGroup {
                     $kx_name
                 }
 
                 fn start(&self) -> Result<Box<dyn crypto::ActiveKeyExchange>, rustls::Error> {
-                    let priv_key = $secret::random(&mut rand_core::OsRng);
+                    let mut rng = R::new();
+                    let priv_key = $secret::random(&mut rng);
                     let pub_key: $public_key = (&priv_key).into();
                     Ok(Box::new([<$name KeyExchange>] {
                         priv_key,
@@ -95,7 +129,7 @@ macro_rules! impl_kx {
                 }
 
                 fn group(&self) -> rustls::NamedGroup {
-                    $name.name()
+                    $kx_name
                 }
             }
         }
@@ -105,4 +139,4 @@ macro_rules! impl_kx {
 impl_kx! {SecP256R1, rustls::NamedGroup::secp256r1, p256::ecdh::EphemeralSecret, p256::PublicKey}
 impl_kx! {SecP384R1, rustls::NamedGroup::secp384r1, p384::ecdh::EphemeralSecret, p384::PublicKey}
 
-pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&X25519, &SecP256R1, &SecP384R1];
+// pub const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[&X25519, &SecP256R1, &SecP384R1];

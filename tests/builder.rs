@@ -1,9 +1,13 @@
 use std::sync::Arc;
 
+use rand_core::CryptoRng;
+use rand_core::Error;
+use rand_core::OsRng;
+use rand_core::RngCore;
+use rustls::crypto::CryptoProvider;
+use rustls::crypto::SupportedKxGroup;
 use rustls::ClientConfig as RusTlsClientConfig;
 use rustls::ServerConfig as RusTlsServerConfig;
-
-use rustls_rustcrypto::provider as rustcrypto_provider;
 
 mod fake_time;
 use fake_time::FakeTime;
@@ -16,6 +20,53 @@ use fake_cert_client_verifier::FakeClientCertVerifier;
 
 mod fake_cert_server_resolver;
 use fake_cert_server_resolver::FakeServerCertResolver;
+
+#[derive(Debug)]
+struct GeneratedOsRng(OsRng);
+
+impl GeneratedRng for GeneratedOsRng {
+    fn new() -> Self {
+        GeneratedOsRng(OsRng)
+    }
+}
+
+impl RngCore for GeneratedOsRng {
+    fn next_u32(&mut self) -> u32 {
+        self.0.next_u32()
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        self.0.next_u64()
+    }
+
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.0.fill_bytes(dest)
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
+        self.0.try_fill_bytes(dest)
+    }
+}
+
+impl CryptoRng for GeneratedOsRng {}
+
+fn rustcrypto_provider() -> CryptoProvider {
+    static RUSTCRYPTO_PROVIDER: Provider<GeneratedOsRng> = Provider::<GeneratedOsRng>::new();
+    const ALL_KX_GROUPS: &[&dyn SupportedKxGroup] = &[
+        &kx::X25519::<GeneratedOsRng>::new(),
+        &kx::SecP256R1::<GeneratedOsRng>::new(),
+        &kx::SecP384R1::<GeneratedOsRng>::new(),
+    ];
+
+    CryptoProvider {
+        cipher_suites: all_cipher_suites(),
+        signature_verification_algorithms: all_signature_verification_algorithms(),
+        secure_random: &RUSTCRYPTO_PROVIDER,
+        key_provider: &RUSTCRYPTO_PROVIDER,
+        kx_groups: ALL_KX_GROUPS.to_vec(),
+    }
+}
+
 
 // Test integration between rustls and rustls in Client builder context
 #[test]
@@ -44,6 +95,11 @@ fn integrate_client_builder_with_details_fake() {
 }
 
 use rustls::DistinguishedName;
+use rustls_rustcrypto::all_cipher_suites;
+use rustls_rustcrypto::all_signature_verification_algorithms;
+use rustls_rustcrypto::kx;
+use rustls_rustcrypto::GeneratedRng;
+use rustls_rustcrypto::Provider;
 
 // Test integration between rustls and rustls in Server builder context
 #[test]
