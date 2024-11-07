@@ -4,7 +4,7 @@ description = """
 Pure Rust cryptography provider for the Rustls TLS library using algorithm implementations from the
 RustCrypto organization
 """
-version = "0.0.2-alpha"
+version = "0.0.3"
 authors = ["RustCrypto Developers"]
 license = "MIT OR Apache-2.0"
 readme = "README.md"
@@ -32,7 +32,7 @@ p384 = { version = "0.13.0", default-features = false, features = ["pem", "ecdsa
 paste = { version = "1.0.15", default-features = false }
 pkcs8 = { version = "0.10.2", default-features = false, features = ["pem", "pkcs5"] }
 pki-types = { package = "rustls-pki-types", version = "1.0.1", default-features = false }
-rand_core = { version = "0.6.4", default-features = false, features = ["getrandom"] }
+rand_core = { version = "0.6.4", default-features = false }
 rsa = { version = "0.9.2", default-features = false, features = ["sha2"] }
 rustls = { version = "0.23.12", default-features = false }
 sec1 = { version = "0.7.3", default-features = false, features = ["pkcs8", "pem"] }
